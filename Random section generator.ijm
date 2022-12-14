@@ -1,4 +1,4 @@
-//open("/Users/diezza/Downloads/OneDrive_1_5-22-2022/SPCKO NC NKX2.1 Merged_Crop001_Resize001 (1).tif");
+//open file you want to analyzw;
 setTool("polygon");
 waitForUser("Select your polygon and click okay");
 roiManager("Add");
@@ -6,7 +6,7 @@ Roi.getBounds(x, y, w, h);
 saveSettings();
 roiManager("Add");
 i = 0; //Counter
-RoisN =30; // number of ROIs
+RoisN =30; // number of ROIs, you can adjust this for the number of sections needed
 trials = 100
 original=getTitle();
 setForegroundColor(255,0,0);
@@ -19,7 +19,7 @@ while(i < RoisN)
 
     if (selectionContains(x1, y1) == true)
     {
-    	makeRectangle(x1, y1, 500, 500);
+    	makeRectangle(x1, y1, 500, 500); //this will make the dimesnions for the size of your regions, can change to fit needs)
     	roiManager("Add");
     	setResult("X", i, x1);
     	setResult("Y", i, y1);
