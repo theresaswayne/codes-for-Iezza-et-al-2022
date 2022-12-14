@@ -1,4 +1,4 @@
-//open file you want to analyzw;
+//open file you want to analyze;
 setTool("polygon");
 waitForUser("Select your polygon and click okay");
 roiManager("Add");
