@@ -7,7 +7,7 @@
 
 // ImageJ macro to save randomly selected tiles from a large image
 // How to use: 
-//     Open an image and run the script.
+//     Open an image exported with pixel resolution = 0.35 µm and run the script.
 
 // ---- Setup ----
 
@@ -17,7 +17,7 @@ id = getImageID();
 title = getTitle();
 dotIndex = indexOf(title, ".");
 basename = substring(title, 0, dotIndex);
-// Restore pixel scale to the JPEG, assuming it was exported at 0.35 µm pixel size
+// Restore image scale, assuming it was exported at 0.35 µm pixel size
 run("Set Scale...", "distance=2.8571 known=1 unit=µm");
 
 
@@ -32,11 +32,10 @@ setBatchMode(false);
 
 // ---- Functions ----
 
-// function to calculate how many tiles to make in a row or column
+// function to help calculate how many tiles to make in a row or column
 function ceiling(value, tolerance) {
-	// finds the ceiling (smallest integer larger than the value), EXCEPT
-	//  if this would result in a tile smaller than the tolerance set by the user
-	//     (fraction of tile size below which an edge tile is not created)
+	// find the ceiling (smallest integer larger than the value), 
+	// EXCEPT if this would result in a tile smaller than the minimum size set by the user
 	if (value - round(value) > tolerance) {
 		return round(value)+1;
 	} else {
@@ -58,11 +57,9 @@ function addRoi(name) {
 	roiManager("Add");
 }
 
-
 // function to create and save a regular non-overlapping grid of ROIs of the selected size
 // covering the bounding box of the user's selection
 function makeGrid(selectedWidth, selectedHeight, minimumSize, imageName, saveName, savePath) {
-	
 	run("Select None");
 	setTool("polygon");
 	waitForUser("Outline the section and click OK");
@@ -72,17 +69,17 @@ function makeGrid(selectedWidth, selectedHeight, minimumSize, imageName, saveNam
 		run("Select All");
    	}
 	
-	// Add the tissue selection and get the bounding box
+	// add the tissue selection and get the bounding box
 	Roi.setName("Selected Area");
 	roiManager("Add"); // this is ROI index 0
 	getSelectionBounds(x, y, width, height);
 
-	// Calculate how many boxes we will need based on the user-selected size 
-	// --  note that thin edges will not be converted, based on tolerance in ceiling function
+	// calculate how many boxes we will need based on the user-selected size 
+	// regions at right and bottom edges may not not be included, based on minimum tile size set by user
 	nBoxesX = ceiling(width/selectedWidth, minimumSize);
 	nBoxesY = ceiling(height/selectedHeight, minimumSize);
 	
-	// remove old overlays
+	// remove any old overlays
 	run("Remove Overlay");
 
 	// create the grid of ROIs
@@ -99,18 +96,15 @@ function makeGrid(selectedWidth, selectedHeight, minimumSize, imageName, saveNam
 }
 
 
-
-
 // function to select random ROIs, create corresponding cropped images, and save
 function selectAndSave(id, basename, ROIsWanted, savePath) {
-
 	// make sure nothing is selected to begin with
 	roiManager("Deselect");
 	run("Select None");
 	
 	numTiles = roiManager("Count")-1; // one of the ROIs is the tissue area
 	if (ROIsWanted >= numTiles) {
-		print("Not enough ROIs to select randomly. Saving all");
+		showMessage("Not enough ROIs to select randomly. Saving all");
 		ROIsWanted = numTiles;
 		indices = Array.getSequence(numTiles);
 	}
@@ -120,15 +114,20 @@ function selectAndSave(id, basename, ROIsWanted, savePath) {
 	
 	// calculate how much to pad the ROI numbers
 	digits = 1 + Math.ceil((log(ROIsWanted)/log(10)));
+	count = 0;
 	
-	for(count=0; count < ROIsWanted; count++) // loop until desired # ROIs is generated
+	// select random tiles
+	while(count < ROIsWanted) // loop until desired # ROIs is generated
 		{ 
-		index = floor(random * numTiles) + 1; // ROIs 1 and up
+		index = floor(random * numTiles) + 1; // select from ROIs # 1 and up (ROI #0 is the tissue selection)
+		
+		// find the center of the initially selected roi
 		roiManager("Select", index);
 		Roi.getBounds(x, y, width, height);
 		centerX = x + (width/2);
 		centerY = y + (height/2);
-		// here, check if the center of the roi is in the user's tissue selection
+		
+		// check if the center of this roi is within the tissue selection
 		roiManager("Select", 0); 
 		if (selectionContains(centerX, centerY) == true) {
 			indices[count] = index;
@@ -141,13 +140,18 @@ function selectAndSave(id, basename, ROIsWanted, savePath) {
 				cropName = basename+"_tile_"+roiNumPad;
 			}
 			
+			// create the image tile
 			selectImage(id);
 			roiManager("Select", indices[count]);
-			run("Duplicate...", "title=&cropName duplicate"); // creates the cropped image
+			run("Duplicate...", "title=&cropName duplicate");
+			
+			// add a 10 µm scale bar and save
 			selectWindow(cropName);
 			run("Scale Bar...", "width=10 height=1 thickness=5 font=14 color=Black background=None location=[Lower Right] horizontal hide");
 			saveAs("tiff", savePath+File.separator+getTitle);
 			close();
+			
+			count++;
 		}
 	}
 	// save the randomly selected ROIs
