@@ -3,99 +3,40 @@
 #@ int(label="Number of ROIs to generate:") RoisN
 #@ double (label="Minimum tile size (as a fraction of desired tile size):", style="slider", value = 0.2, min=0, max=1, stepSize=0.1) minSize
 #@ File (label = "Output directory", style = "directory") path
+#@ String (label = "Output file name:",choices={"Original name", "ROI number only"}, style="radioButtonHorizontal") outputName
 
-// ImageJ macro
+// ImageJ macro to save randomly selected tiles from a large image
 // How to use: 
 //     Open an image and run the script.
-
 
 // ---- Setup ----
 
 roiManager("reset");
-
 // get image info
 id = getImageID();
 title = getTitle();
 dotIndex = indexOf(title, ".");
 basename = substring(title, 0, dotIndex);
-
-
-//setTool("polygon");
-//waitForUser("Select your polygon and click okay");
-//roiManager("Add");
-//Roi.getBounds(x, y, w, h);
-//saveSettings(); //???
-//roiManager("Add");
+// Restore pixel scale to the JPEG, assuming it was exported at 0.35 µm pixel size
+run("Set Scale...", "distance=2.8571 known=1 unit=µm");
 
 
 // ---- Run the functions ----
 
 setBatchMode(true); // greatly increases speed and prevents lost tiles
-makeGrid(tileWidth, tileHeight, minSize, basename, path);
-//selectROIs(RoisN);
+makeGrid(tileWidth, tileHeight, minSize, basename, outputName, path);
 selectAndSave(id, basename, RoisN, path); 
 print("Saving to",path);
 showMessage("Finished");
 setBatchMode(false);
 
-//
-//i = 0; //Counter
-//// RoisN =10; // number of ROIs, you can adjust this for the number of sections needed
-//trials = 100
-//original=getTitle();
-//setForegroundColor(255,0,0);
-//
-//while(i < RoisN)
-//{
-//	roiManager("select", 0);
-//	x1 = random()*w + x; //takes random # between 0-1, multiplies times width
-//    y1 = random()*h + y; //same as above
-//
-//    if (selectionContains(x1, y1) == true)
-//    {
-//    	makeRectangle(x1, y1, tileWidth, tileHeight); //this will make the dimesnions for the size of your regions, can change to fit needs)
-//    	roiManager("Add");
-//    	setResult("X", i, x1);
-//    	setResult("Y", i, y1);
-//    	v = getPixel(x1, y1);
-//
-//		// record RGB pixel values
-//    	if (bitDepth() == 24)
-//    	{
-//    		red = (v >> 16)&0xff;
-//    		green = (v >> 8)&0xff;
-//    		blue = v&0xff;
-//    		setResult("Red", i, red);
-//    		setResult("Green", i, green);
-//    		setResult("Blue", i, blue);
-//    	}
-//
-//    	else 
-//    	{
-//    		// record grayscale pixel value
-//    		setResult("Value", i, v);
-//    		updateResults;
-//    	}
-//    	i++;
-//    }
-//    
-//}
-
-//roiManager("show all with labels");
-//roiManager("select", 0); // the original polygon
-//roiManager("delete");
-//roiManager("select all");
-
-
-
 // ---- Functions ----
 
-// helper function for how many tiles to make in a row or column
+// function to calculate how many tiles to make in a row or column
 function ceiling(value, tolerance) {
 	// finds the ceiling (smallest integer larger than the value), EXCEPT
 	//  if this would result in a tile smaller than the tolerance set by the user
 	//     (fraction of tile size below which an edge tile is not created)
-	// tolerance = 0.2; 
 	if (value - round(value) > tolerance) {
 		return round(value)+1;
 	} else {
@@ -103,48 +44,57 @@ function ceiling(value, tolerance) {
 	}
 }
 
-// helper function for adding ROIs to the ROI manager, with the right name
-function addRoi() {
+// function to add ROIs to the ROI manager, with the correct name
+function addRoi(name) {
 	image = getTitle();
 	roinum = roiManager("Count");
-	Roi.setName(image+" ROI #"+(roinum+1));
+	// name ROIs either anonymously or with the original image name
+	if (name == "ROI number only") {
+		Roi.setName("ROI #"+(roinum+1));
+		}
+	else if (outputName == "Original name") {
+		Roi.setName(image+" ROI #"+(roinum+1));
+		}
 	roiManager("Add");
 }
 
 
-/*
- * Creates a regular non-overlapping grid around the user's selection in tiles of selectedSize
- * and saves the ROI set
- */
-function makeGrid(selectedWidth, selectedHeight, minimumSize, imageName, savePath) {
+// function to create and save a regular non-overlapping grid of ROIs of the selected size
+// covering the bounding box of the user's selection
+function makeGrid(selectedWidth, selectedHeight, minimumSize, imageName, saveName, savePath) {
 	
-	
+	run("Select None");
 	setTool("polygon");
 	waitForUser("Outline the section and click OK");
+	// if there is no selection, use the whole image
+	type = selectionType();
+   	if (type==-1) {
+		run("Select All");
+   	}
 	
-	//Make grid based on selection or whole image
+	// Add the tissue selection and get the bounding box
+	Roi.setName("Selected Area");
 	roiManager("Add"); // this is ROI index 0
 	getSelectionBounds(x, y, width, height);
-	
-	// Set Color
-	color = "red";
 
 	// Calculate how many boxes we will need based on the user-selected size 
 	// --  note that thin edges will not be converted, based on tolerance in ceiling function
 	nBoxesX = ceiling(width/selectedWidth, minimumSize);
 	nBoxesY = ceiling(height/selectedHeight, minimumSize);
 	
+	// remove old overlays
 	run("Remove Overlay");
-	// roiManager("Reset");
 
+	// create the grid of ROIs
 	for(j=0; j< nBoxesY; j++) {
 		for(i=0; i< nBoxesX; i++) {
 			makeRectangle(x+i*selectedWidth, y+j*selectedHeight, selectedWidth,selectedHeight);
-			addRoi();
+			addRoi(saveName);
 		}
 	}
-
+	// save the full grid of ROIs
 	run("Select None");
+	roiManager("Deselect");
 	roiManager("save", savePath+File.separator+imageName+"_AllROIs.zip");
 }
 
@@ -158,66 +108,52 @@ function selectAndSave(id, basename, ROIsWanted, savePath) {
 	roiManager("Deselect");
 	run("Select None");
 	
-	indices = newArray(ROIsWanted);
-	roinum = roiManager("Count");
-	
-	if (ROIsWanted >= roinum) {
+	numTiles = roiManager("Count")-1; // one of the ROIs is the tissue area
+	if (ROIsWanted >= numTiles) {
 		print("Not enough ROIs to select randomly. Saving all");
-		indices = Array.getSequence(roinum);
+		ROIsWanted = numTiles;
+		indices = Array.getSequence(numTiles);
 	}
-
+	else {
+		indices = newArray(ROIsWanted);
+	}
 	
-	//numROIs = roiManager("count");
 	// calculate how much to pad the ROI numbers
 	digits = 1 + Math.ceil((log(ROIsWanted)/log(10)));
 	
-	for(count=0; count <= ROIsWanted; count++) // loop until desired # ROIs is generated
+	for(count=0; count < ROIsWanted; count++) // loop until desired # ROIs is generated
 		{ 
-		index = floor(random * roinum) + 1; // ROIs 1 and up
+		index = floor(random * numTiles) + 1; // ROIs 1 and up
 		roiManager("Select", index);
 		Roi.getBounds(x, y, width, height);
 		centerX = x + (width/2);
 		centerY = y + (height/2);
-		// here, check if the center of the roi is in the selection
+		// here, check if the center of the roi is in the user's tissue selection
 		roiManager("Select", 0); 
 		if (selectionContains(centerX, centerY) == true) {
 			indices[count] = index;
-		
 			roiNumPad = IJ.pad(count, digits);
-			cropName = basename+"_tile_"+roiNumPad;
+			// set output image name
+			if (outputName == "ROI number only") {
+				cropName = "tile_"+roiNumPad;
+			}
+			else if (outputName == "Original name") {
+				cropName = basename+"_tile_"+roiNumPad;
+			}
+			
 			selectImage(id);
 			roiManager("Select", indices[count]);
-			
-			setResult("X", count, x); // array index is 0, result row is 0
-			setResult("Y", count, y);
-			v = getPixel(x, y);
-			
-			if (bitDepth() == 24) {
-				// record RGB pixel values
-	    		red = (v >> 16)&0xff;
-	    		green = (v >> 8)&0xff;
-	    		blue = v&0xff;
-	    		setResult("Red", count, red);
-	    		setResult("Green", count, green);
-	    		setResult("Blue", count, blue);
-		    	}
-		    else {
-	  			// record grayscale pixel value
-		    	setResult("Value", count, v);
-		    	}
-	    	updateResults;
 			run("Duplicate...", "title=&cropName duplicate"); // creates the cropped image
 			selectWindow(cropName);
+			run("Scale Bar...", "width=10 height=1 thickness=5 font=14 color=Black background=None location=[Lower Right] horizontal hide");
 			saveAs("tiff", savePath+File.separator+getTitle);
 			close();
-			} // if tile center is in selected area of interest
-		}	// loop to select ROIs
+		}
+	}
+	// save the randomly selected ROIs
 	run("Select None");
-	
-	
 	roiManager("Deselect");
 	roiManager("select", indices);
 	roiManager("save selected", savePath+File.separator+basename+"_SelectedROIs.zip");
 
 }
-
