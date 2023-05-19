@@ -5,12 +5,13 @@
 #@ String (label = "Output file name:",choices={"Original name", "ROI number only"}, style="radioButtonHorizontal") outputName
 #@ double (label = "Pixel size in microns", value = 0.35) pixSize
 
-// ImageJ macro to save randomly selected tiles from a large image
+// ImageJ macro for unbiased selection of tiles from a large image
+// Tiles are non-overlapping and at least 1 image width apart.
 // How to use: 
-//     Open an RGB format image (recommended pixel size = 0.35 µm) and run the script.
+//     Open an image (recommended pixel size = 0.35 µm) and run the script, entering the parameters as prompted.
 // Output: 
-//	The desired number of randomly selected tiles from the image, with a 10-µm scale bar
-//  ROI sets showing the selected section area, the full set of tiles, and the random subset 
+//	1) The requested number of randomly selected tiles from the image, with a 10-µm scale bar
+//  2) ROI sets showing the selected section area, the full set of tiles, and the random subset
 
 // ---- Setup ----
 
@@ -33,7 +34,7 @@ run("Set Scale...", "distance=&pixSize known=1 unit=µm");
 
 // ---- Run the functions ----
 
-setBatchMode(true); // greatly increases speed and prevents lost tiles
+setBatchMode(true); // increases speed and reliability
 makeGrid(tileWidth, minSize, basename, outputName, path);
 selectAndSave(id, basename, RoisN, tileWidth, path); 
 print("Saving to",path);
@@ -61,7 +62,7 @@ function addRoi(name) {
 	if (name == "ROI number only") {
 		Roi.setName("ROI #"+(roinum+1));
 		}
-	else if (outputName == "Original name") {
+	else if (name == "Original name") {
 		Roi.setName(image+" ROI #"+(roinum+1));
 		}
 	roiManager("Add");
@@ -70,22 +71,25 @@ function addRoi(name) {
 // function to create and save a regular non-overlapping grid of ROIs of the selected size
 // covering the bounding box of the user's selection
 function makeGrid(selectedWidth, minimumSize, imageName, saveName, savePath) {
+
 	run("Select None");
 	setTool("polygon");
 	waitForUser("Outline the section and click OK");
+	
 	// if there is no selection, use the whole image
 	type = selectionType();
    	if (type==-1) {
 		run("Select All");
    	}
 	
-	// add the tissue selection and get the bounding box
+	// record the tissue selection
 	Roi.setName("Selected Area");
 	roiManager("Add"); // this is ROI index 0
-	getSelectionBounds(x, y, width, height);
+	
 
 	// calculate how many boxes we will need based on the user-selected size 
 	// regions at right and bottom edges may not not be included, based on minimum tile size set by user
+	getSelectionBounds(x, y, width, height);
 	nBoxesX = ceiling(width/selectedWidth, minimumSize);
 	nBoxesY = ceiling(width/selectedWidth, minimumSize);
 	
@@ -100,7 +104,7 @@ function makeGrid(selectedWidth, minimumSize, imageName, saveName, savePath) {
 		}
 	}
 
-	// go through the grid and remove those whose centers are not in the selected area
+	// go through the grid and remove tiles whose centers are not in the selected tissue area
 	numRois = roiManager("count");
 	outsideTiles = newArray;
 	outsideCount = 0;
@@ -117,13 +121,13 @@ function makeGrid(selectedWidth, minimumSize, imageName, saveName, savePath) {
 			outsideCount++;
 		}
 	}
+	// delete any unneeded ROIs and rename the rest
 	if (outsideCount > 0) {
 		roiManager("select", outsideTiles);
 		roiManager("delete");
 		roiManager("Deselect");
 	
 		numRois = roiManager("count");
-		print("Renaming the remaining",numRois-1,"ROIs");
 		for (index = 1; index < numRois; index++) {
 			roiManager("Deselect");
 			roiManager("Select", index);
@@ -137,7 +141,7 @@ function makeGrid(selectedWidth, minimumSize, imageName, saveName, savePath) {
 		}
 	}
 	
-	// save the grid of ROIs and the tissue area
+	// save the ROIs for tissue area and the tiles inside it
 	run("Select None");
 	roiManager("Deselect");
 	roiManager("save", savePath+File.separator+imageName+"_AllROIs.zip");
@@ -151,16 +155,42 @@ function selectAndSave(id, basename, ROIsWanted, fieldWidth, savePath) {
 	roiManager("Deselect");
 	run("Select None");
 	
-	numTiles = roiManager("Count")-1; // one of the ROIs is the tissue area
+	numTiles = roiManager("Count")-1; // -1 because one of the ROIs is the tissue area
 	print("We have",numTiles,"ROIs and we want", ROIsWanted, "at least",tileWidth,"apart");
-	// if the number of ROIs wanted is > 1/4 the number of tiles in a rectangular grid,
-	// it will be difficult or impossible to achieve the desired distance
-	if (ROIsWanted >= 0.25 * numTiles) {
+	// The number of ROIs should be small compared to the number of tiles.
+	// It may be difficult or impossible to achieve the desired distance when picking 
+	// > 1/4 the number of tiles in a rectangular grid
+	
+	if (ROIsWanted >= (0.25 * numTiles)) {
 		showMessage("Not enough ROIs to select randomly with sufficient distance. Saving 1/4 of the tiles");
 		ROIsWanted = floor(0.25 * numTiles);
+		digits = 1 + Math.ceil((log(ROIsWanted)/log(10)));
 		indicesAll = Array.getSequence(numTiles);
 		indices = Array.resample(indicesAll,ROIsWanted);
-		print("Selecting",indices);
+		
+		for (i = 0; i < indices.length; i++) {
+			roiNumPad = IJ.pad(indices[i], digits);
+			// set output image name
+			if (outputName == "ROI number only") {
+				cropName = "tile_"+roiNumPad;
+			}
+			else if (outputName == "Original name") {
+				cropName = basename+"_tile_"+roiNumPad;
+			}
+
+			// create the image tile
+			selectImage(id);
+			roiManager("Deselect");
+			roiManager("Select", indices[i]);
+			run("Duplicate...", "title=&cropName duplicate");
+			
+			// add a 10 µm scale bar and save
+			selectWindow(cropName);
+			run("Scale Bar...", "width=10 height=1 thickness=5 font=14 color=Black background=None location=[Lower Right] horizontal hide");
+			saveAs("tiff", savePath+File.separator+getTitle);
+			close();
+		}
+
 	}
 	else {
 		
