@@ -220,7 +220,7 @@ function selectAndSave(id, basename, ROIsWanted, fieldWidth, savePath) {
 		centersY = newArray;
 		centersY = Array.concat(centersY,centerY);
 		print("First center is",centersX[0],centersY[0]);
-		roiNumPad = IJ.pad(index, digits);
+		roiNumPad = IJ.pad(count+1, digits);
 		// set output image name
 		if (outputName == "ROI number only") {
 			cropName = "tile_"+roiNumPad;
@@ -279,7 +279,7 @@ function selectAndSave(id, basename, ROIsWanted, fieldWidth, savePath) {
 				centersX = Array.concat(centersX,centerX);
 				centersY= Array.concat(centersY,centerY);
 				print("ROI", index,"has been accepted");
-				roiNumPad = IJ.pad(index, digits);
+				roiNumPad = IJ.pad(count+1, digits);
 				// set output image name
 				if (outputName == "ROI number only") {
 					cropName = "tile_"+roiNumPad;
