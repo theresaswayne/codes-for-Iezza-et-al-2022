@@ -1,9 +1,9 @@
 #@ int(label="Width of tiles in pixels") tileWidth
 #@ int(label="Number of ROIs to generate") RoisN
-#@ double (label="Minimum tile size (as a fraction of desired tile size)", style="slider", value = 0.2, min=0, max=1, stepSize=0.1) minSize
+#@ Double (label="Minimum tile size (as a fraction of desired tile size)", style="slider", value = 0.2, min=0, max=1, stepSize=0.1) minSize
 #@ File (label = "Output directory", style = "directory") path
 #@ String (label = "Output file name:",choices={"Original name", "ROI number only"}, style="radioButtonHorizontal") outputName
-#@ double (label = "Pixel size in microns", value = 0.35) pixSize
+#@ Double (label = "Pixel size in microns", value = 0.35) pixSize
 
 // ImageJ macro for unbiased selection of tiles from a large image
 // Tiles are non-overlapping and at least 1 image width apart.
@@ -159,11 +159,11 @@ function selectAndSave(id, basename, ROIsWanted, fieldWidth, savePath) {
 	print("We have",numTiles,"ROIs and we want", ROIsWanted, "at least",tileWidth,"apart");
 	// The number of ROIs should be small compared to the number of tiles.
 	// It may be difficult or impossible to achieve the desired distance when picking 
-	// > 1/4 the number of tiles in a rectangular grid
+	// > 1/8 the number of tiles in a rectangular grid
 	
-	if (ROIsWanted >= (0.25 * numTiles)) {
-		showMessage("Not enough ROIs to select randomly with sufficient distance. Saving 1/4 of the tiles");
-		ROIsWanted = floor(0.25 * numTiles);
+	if (ROIsWanted >= (0.125 * numTiles)) {
+		showMessage("Not enough ROIs to select randomly with sufficient distance. Saving 1/8 of the tiles");
+		ROIsWanted = floor(0.125 * numTiles);
 		digits = 1 + Math.ceil((log(ROIsWanted)/log(10)));
 		indicesAll = Array.getSequence(numTiles);
 		indices = Array.resample(indicesAll,ROIsWanted);
@@ -245,7 +245,6 @@ function selectAndSave(id, basename, ROIsWanted, fieldWidth, savePath) {
 		emergencyBrake = 0; // stops execution if it gets stuck in a long or infinite loop 
 		while(count < ROIsWanted && emergencyBrake < 100) // loop until desired # ROIs is generated
 			{ 
-			emergencyBrake++;
 			index = floor(random * numTiles) + 1; // select from ROIs # 1 and up (ROI #0 is the tissue selection)
 			print("Selected ROI",index);
 			// find the center of the randomly selected roi
@@ -303,6 +302,10 @@ function selectAndSave(id, basename, ROIsWanted, fieldWidth, savePath) {
 				
 				count++;
 			}	
+			emergencyBrake++;
+			if (emergencyBrake == 100) {
+				print("Exiting after failing to get enough tiles.");
+			}
 		}
 	}
 	// save the randomly selected ROIs
